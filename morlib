@@ -1,0 +1,59 @@
+_morlib_has_terminfo=0
+zmodload zsh/terminfo 2>/dev/null && _morlib_has_terminfo=1
+
+-morlib_alternate_screen() {
+    [[ "$1" = "1" && -n "$terminfo[smcup]" ]] && {
+        echo -n "$terminfo[smcup]"
+        return
+    }
+    [[ "$1" = "0" && -n "$terminfo[rmcup]" ]] && {
+        echo -n "$terminfo[rmcup]"
+        return
+    }
+
+    case "$TERM" in
+        *rxvt*)
+            [ "$1" = "1" ] && echo -n $'\x1b7\x1b[?47h'
+            [ "$1" = "0" ] && echo -n $'\x1b[2J\x1b[?47l\x1b8'
+            ;;
+        *)
+            [ "$1" = "1" ] && echo -n $'\x1b[?1049h'
+            [ "$1" = "0" ] && echo -n $'\x1b[?1049l'
+            # just to remember two other that work: $'\x1b7\x1b[r\x1b[?47h', $'\x1b[?47l\x1b8'
+            ;;
+    esac
+}
+
+# Prefer tput, then module terminfo
+-morlib_cursor_visibility() {
+    if type tput 2>/dev/null 1>&2; then
+        [ "$1" = "1" ] && { tput cvvis; tput cnorm }
+        [ "$1" = "0" ] && tput civis
+    elif [ "$_morlib_has_terminfo" = "1" ]; then
+        [ "$1" = "1" ] && { [ -n $terminfo[cvvis] ] && echo -n $terminfo[cvvis];
+                           [ -n $terminfo[cnorm] ] && echo -n $terminfo[cnorm] }
+        [ "$1" = "0" ] && [ -n $terminfo[civis] ] && echo -n $terminfo[civis]
+    fi 
+}
+
+-morlib_wait_for_any_key() {
+    integer count="$1"
+    count=2*count
+
+    while (( count -- )); do
+        LANG=C read -rs -k 1 -t 0.5
+        (( $? == 0 )) && break
+    done
+}
+
+-morlib_begin() {
+    -morlib_alternate_screen 1
+    -morlib_cursor_visibility 0
+}
+
+-morlib_end() {
+    -morlib_alternate_screen 0
+    -morlib_cursor_visibility 1
+}
+
+# vim:ft=zsh

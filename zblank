@@ -1,0 +1,33 @@
+#!/usr/bin/env zsh
+
+emulate -LR zsh
+
+[ "$1" = "-s" ] && SSAVER_MODE="1"
+
+#
+# Main code
+#
+
+# Standard screen saver before-loop block
+fpath+=( "${0%/*}" )
+autoload morlib
+morlib
+-morlib_begin
+trap "-morlib_end; exit" TERM INT QUIT
+trap "-morlib_end" EXIT
+# End of standard screen saver before-loop block
+
+redraw_delay=300
+
+# Main loop
+while (( 1 )); do
+    tput clear
+
+    if [ "$SSAVER_MODE" = "1" ]; then
+        -morlib_wait_for_any_key $redraw_delay && exit
+    else
+        sleep $redraw_delay
+    fi
+done
+
+# vim:ft=zsh

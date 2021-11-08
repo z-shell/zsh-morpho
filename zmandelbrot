@@ -1,0 +1,54 @@
+#!/usr/bin/env zsh
+
+emulate -LR zsh
+
+[ "$1" = "-s" ] && SSAVER_MODE="1"
+
+# Draws mandelbrot fractal {{{1
+function -morpho_mandelbrot {
+   integer lines columns colour i=0
+   float a b p q pnew
+
+   columns=COLUMNS-1
+   lines=LINES-1
+
+   for (( b=-1.5; b<=1.5; b+=3.0/lines )) do
+       for (( a=-2.0; a<=1; a+=3.0/columns )) do
+           for (( p=0.0, q=0.0, i=0; p*p+q*q < 4 && i < 32; i++ )) do
+               (( pnew=p*p-q*q+a, q=2*p*q+b, p=pnew ))
+           done
+           ((colour=(i/4)%8))
+            echo -n "\\e[4${colour}m "
+        done
+        echo "\\e[0m"
+    done
+}
+# 1}}}
+
+#
+# Main code
+#
+
+# Standard screen saver before-loop block
+fpath+=( "${0%/*}" )
+autoload morlib
+morlib
+-morlib_begin
+trap "-morlib_end; exit" TERM INT QUIT
+trap "-morlib_end" EXIT
+# End of standard screen saver before-loop block
+
+redraw_delay=300
+
+# Main loop
+while (( 1 )); do
+    -morpho_mandelbrot
+
+    if [ "$SSAVER_MODE" = "1" ]; then
+        -morlib_wait_for_any_key $redraw_delay && exit
+    else
+        sleep $redraw_delay
+    fi
+done
+
+# vim:ft=zsh

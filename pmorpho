@@ -1,0 +1,347 @@
+#!/usr/bin/env python
+
+import os
+import math
+import sys
+import random
+import time
+import atexit
+import re
+
+# Old system state
+Ao = []
+Bo = []
+
+# New system state
+An = []
+Bn = []
+
+# Helper variables
+index = 0
+colidx = 0
+color = 0.0
+tmp1 = 0.0
+tmp2 = 0.0
+
+# Configurations
+crowsize = 7
+configs=[ #CA#   #CB#    #iter.# #internal mul.#   #factor#  #smooth mul."   #a, b, both#
+          10.0,  23.39,  14,     0.0084,           1.122,    0.3,            2,
+          10.0,  23.39,  14,     0.0105,           1.422,    0.309,          3,
+          10.0,  23.39,  14,     0.0105,           0.1422,   0.48,           2,
+] 
+
+CA = 10.0
+CB = 23.39
+C_iter = 0
+C_imul = 0.0
+C_factor = 0.0
+C_smul = 0.0
+C_abboth = 0.0
+
+# morpho_solve_one_iteration* vars
+i = 0
+j = 0
+n = 0
+i_add1 = 0
+i_sub1 = 0
+j_add1 = 0
+j_sub1 = 0
+index = 0
+index_jadd1 = 0
+index_iadd1 = 0
+index_jsub1 = 0
+index_isub1 = 0
+DiA = 0.0
+ReA = 0.0
+DiB = 0.0
+ReB = 0.0
+
+Aval = 0.0
+Bval= 0.0
+
+Anext_x = 0.0
+Anext_y = 0.0
+Aprev_x = 0.0
+Aprev_y = 0.0
+
+Bnext_x = 0.0
+Bnext_y = 0.0
+Bprev_x = 0.0
+Bprev_y = 0.0
+
+
+# One iteration on An, Bn
+# {{{
+def morpho_solve_one_iteration():
+    for i in range(0, height):
+        i_add1=(i+1)%height
+        i_sub1=i-1
+        if i_sub1 < 0:
+            i_sub1=height-1
+
+        for j in range(0, width):
+            j_add1=(j+1)%width
+            j_sub1=j-1
+            if j_sub1 < 0:
+                j_sub1=width-1
+
+            index=i*width+j
+            index_jadd1=i*width+j_add1
+            index_iadd1=i_add1*width+j
+            index_jsub1=i*width+j_sub1
+            index_isub1=i_sub1*width+j
+
+            Aval=Ao[index]
+            Bval=Bo[index]
+
+            # Substance A - its diffusion process
+            # DiA=$(( CA * (Anext_x - 2.0 * Aval + Aprev_x  +  Anext_y - 2.0 * Aval + Aprev_y) ))
+            DiA =   CA * ( Ao[index_jadd1] - 2.0 * Aval + Ao[index_jsub1]   +
+                           Ao[index_iadd1] - 2.0 * Aval + Ao[index_isub1] )
+            # ... its reaction process
+            ReA = Aval * Bval - Aval - 12.0
+
+            An[index] = Aval + C_imul * (ReA + DiA)
+
+            # Substance B - its diffusion process
+            # DiB=$(( CB * (Bnext_x - 2.0 * Bval + Bprev_x  +  Bnext_y - 2.0 * Bval + Bprev_y) ))
+            DiB =   CB * ( Bo[index_jadd1] - 2.0 * Bval + Bo[index_jsub1]   +
+                           Bo[index_iadd1] - 2.0 * Bval + Bo[index_isub1] )
+            # ... its reaction process
+            ReB = 16.0 - Aval * Bval
+
+            # Euler step
+            Bn[index] = Bval + C_imul * (ReB + DiB)
+# }}}
+
+# One iteration on Ao, Bo
+# {{{
+def morpho_solve_one_iteration_reversed():
+    for i in range(0, height):
+        i_add1=(i+1)%height
+        i_sub1=i-1
+        if i_sub1 < 0:
+            i_sub1=height-1
+
+        for j in range(0, width):
+            j_add1=(j+1)%width
+            j_sub1=j-1
+            if j_sub1 < 0:
+                j_sub1=width-1
+
+            index=i*width+j
+            index_jadd1=i*width+j_add1
+            index_iadd1=i_add1*width+j
+            index_jsub1=i*width+j_sub1
+            index_isub1=i_sub1*width+j
+
+            Aval=An[index]
+            Bval=Bn[index]
+
+            # Substance A - its diffusion process
+            # DiA=$(( CA * (Anext_x - 2.0 * Aval + Aprev_x  +  Anext_y - 2.0 * Aval + Aprev_y) ))
+            DiA =   CA * ( An[index_jadd1] - 2.0 * Aval + An[index_jsub1]   +
+                           An[index_iadd1] - 2.0 * Aval + An[index_isub1] )
+            # ... its reaction process
+            ReA = Aval * Bval - Aval - 12.0
+
+            Ao[index] = Aval + C_imul * (ReA + DiA)
+
+            # Substance B - its diffusion process
+            # DiB=$(( CB * (Bnext_x - 2.0 * Bval + Bprev_x  +  Bnext_y - 2.0 * Bval + Bprev_y) ))
+            DiB =   CB * ( Bn[index_jadd1] - 2.0 * Bval + Bn[index_jsub1]   +
+                           Bn[index_iadd1] - 2.0 * Bval + Bn[index_isub1] )
+            # ... its reaction process
+            ReB = 16.0 - Aval * Bval
+
+            Bo[index] = Bval + C_imul * (ReB + DiB)
+# }}}
+
+# Main loop
+# {{{
+def morpho_solve():
+    # Iterations
+    for n in range(0, C_iter):
+        morpho_solve_one_iteration()
+        morpho_solve_one_iteration_reversed()
+# }}}
+
+# Initial randomization
+# {{{
+def morpho_randomize():
+    prev1 = 0.0
+    prev2 = 0.0
+    new1 = 0.0
+    new2 = 0.0
+
+    for i in range(0, height):
+        for j in range(0, width):
+            new1 = random.uniform(0.0, 1.0)
+            if new1 > prev1 * C_factor:
+                new1=new1*C_smul
+            elif new1 < prev1 / C_factor:
+                new1=new1/C_smul
+
+            new2 = random.uniform(0.0, 1.0)
+            if new2 > prev2 * C_factor:
+                new2=new2*C_smul
+            elif new2 < prev2 / C_factor:
+                new2=new2/C_smul
+
+            # Store into the array
+            index=i*width+j
+            #print "Storring to " + str(index) + " while width*height is " + str(width*height)
+            Ao[index] = new1*30.0
+            Bo[index] = new2*30.0
+
+            prev1=new1
+            prev2=new2
+# }}}
+
+# Draw
+# {{{
+def morpho_render():
+    # Get maximum average
+    maxv = 0.0
+    for i in range(0, height):
+        for j in range(0, width):
+            index=i*width+j
+            if C_abboth == 1:
+                tmp1=Ao[index]
+                tmp2=Ao[index]
+            elif C_abboth == 2:
+                tmp1=Bo[index]
+                tmp2=Bo[index]
+            else:
+                tmp1=Ao[index]
+                tmp2=Bo[index]
+
+            tmp1 = (tmp1+tmp2) / 2.0
+
+            if maxv < tmp1:
+                maxv = tmp1
+
+    for i in range(0, height):
+        for j in range(0, width):
+            index=i*width+j
+            if C_abboth == 1:
+                tmp1=Ao[index]
+                tmp2=Ao[index]
+            elif C_abboth == 2:
+                tmp1=Bo[index]
+                tmp2=Bo[index]
+            else:
+                tmp1=Ao[index]
+                tmp2=Bo[index]
+
+            tmp1 = (tmp1+tmp2) / 2.0
+
+            # 8 colors
+            color = math.fabs(math.ceil(tmp1/maxv*7.99))
+            colidx = int(color)
+            sys.stdout.write("\033[4" + str(colidx) + "m ")
+        sys.stdout.write("\033[0m")
+        sys.stdout.flush()
+# }}}
+
+# Alternate screen
+# {{{
+def alternate_screen(onoff):
+    if onoff == "on":
+        code = os.popen('tput smcup', 'r').read()
+    else:
+        code = os.popen('tput rmcup', 'r').read()
+
+    if code == "":
+        term = os.environ.get('TERM','unknown')
+        pattern = re.compile(".*rxvt.*")
+        if pattern.match(term):
+            if onoff == "on":
+                code = '\x1b7\x1b[?47h'
+            else:
+                code = '\x1b[2J\x1b[?47l\x1b8'
+        else:
+            if onoff == "on":
+                code = '\x1b[?1049h'
+            else:
+                code = '\x1b[?1049l'
+
+    sys.stdout.write(code)
+    sys.stdout.flush()
+# }}}
+
+# Makes cursor invisible or visible
+# {{{
+def cursor_visibility(onoff):
+    if onoff == "on":
+        code = os.popen('tput cnorm', 'r').read()
+    else:
+        code = os.popen('tput civis', 'r').read()
+    sys.stdout.write(code)
+    sys.stdout.flush()
+# }}}
+
+alternate_screen("on")
+cursor_visibility("off")
+atexit.register(alternate_screen, 'off')
+atexit.register(cursor_visibility, 'on')
+
+#
+# Main code
+#
+
+try:
+
+    #random.seed(4)
+    #random.seed(9)
+    #random.seed(10)
+    #random.seed(18)
+    #random.seed(35)
+    #random.seed(62)
+    #random.seed(76)
+    #random.seed(93)
+    #random.seed(192)
+    #random.seed(384)
+
+    # Main loop
+    while True:
+        height_str, width_str = os.popen('stty size', 'r').read().split()
+        height=int(height_str)
+        width=int(width_str)
+
+        An = [0.0] * (width*height)
+        Bn = [0.0] * (width*height)
+        Ao = [0.0] * (width*height)
+        Bo = [0.0] * (width*height)
+
+        #
+        # Select configuration
+        #
+
+        crows = len(configs) / crowsize
+        crow = random.randint(1,crows)
+        cidx = (crow-1)*crowsize
+
+        CA=configs[cidx]
+        CB=configs[cidx+1]
+        C_iter=configs[cidx+2]
+        C_imul=configs[cidx+3]
+        C_factor=configs[cidx+4]
+        C_smul=configs[cidx+5]
+        C_abboth=configs[cidx+6]
+
+        morpho_randomize()
+        morpho_solve()
+
+        code = os.popen('tput cup 0 0', 'r').read()
+        sys.stdout.write(code)
+
+        morpho_render()
+
+        time.sleep(5*60)
+
+except (KeyboardInterrupt, SystemExit):
+        raise
+
+# vim:ft=python
