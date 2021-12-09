@@ -34,15 +34,15 @@ The plugin is "standalone", which means that only sourcing it is needed. So to
 install, unpack `zsh-morpho` somewhere and add
 `source {where-zsh-morpho-is}/zsh-morpho.plugin.zsh` to `zshrc`.
 
-If using a plugin manager, then `Zinit` is recommended, but you can use any
+If using a plugin manager, then `ZI` is recommended, but you can use any
 other too, and also install with `Oh My Zsh` (by copying directory to
 `~/.oh-my-zsh/custom/plugins`).
 
-### [Zinit](https://github.com/z-shell/zinit)
+### [ZI](https://github.com/z-shell/zi)
 
-Add `zinit load z-shell/zsh-morpho` to `.zshrc`.
+Add `zi load z-shell/zsh-morpho` to `.zshrc`.
 The plugin will be loaded next time you start `Zsh`.
-To update issue `zinit update z-shell/zsh-morpho` from command line.
+To update issue `zi update z-shell/zsh-morpho` from command line.
 
 ### Zgen
 
